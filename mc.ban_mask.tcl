@@ -1,12 +1,17 @@
 ##
-# Ban Mask v1.4.1
+# Ban Mask v1.4.2
 #  by MC_8 - Carl M. Gregory <mc8@purehype.net>
 #  This script will only run on eggdrop 1.6.13 or greater.
+#  This script will only run with TCL 8.4 or greater
+#    (due to a bug in prev. tcl versions).
 #
 #    R.I.P. Mom, To always be remembered; Nancy Marie Gregory.
 #
 # My Website - http://mc.purehype.net/
-# Have a bug?  http://mc.purehype.net/bugzilla/
+# Have a bug or script not working correctly?
+#   http://mc.purehype.net/bugzilla/
+# Have a question?
+#   http://forum.purehype.net/viewforum.php?f=5
 ##
 
 ##
@@ -101,15 +106,15 @@ set mc_banm(:config:banmask) 3
 # http://dev.scriptics.com/doc/howto/regexp81.html
 set mc_banm(:config:use:regexp) 0
 
-
-## SVS Client (Script Version Service) v4.0.1 ##
+## SVS Client (Script Version Service) v4.1.2 ##
 # Once a day, the SVS Client will connect to MC_8's SVS Server to determine if
 # there is a newer version of this script available.  If a newer version is
 # found, the script will be auto updated.
 
-# [0=no/1=yes] Do you want to enable auto updating?
+# [0=no/1=yes] Do you want to enable auto updating?  If you chose to disable
+# auto updating, it will not automatically update the script upon finding a
+# newer version.
 set mc_banm(:config:svs:enable) 1
-
 
 #
 ##
@@ -119,9 +124,15 @@ set mc_banm(:config:svs:enable) 1
 ##
 #
 
+## SVS insert (pre code)
 #Script:mc_banm
-
 catch {unset temp}
+
+foreach temp(bind) [binds mc:banm:*] {
+  foreach {temp(1) temp(2) temp(3) temp(4) temp(5)} $temp(bind) break
+  catch {unbind $temp(1) $temp(2) $temp(3) $temp(5)}
+}
+
 set mc_banm(info:vars) ""
 foreach {temp(name) temp(value)} [array get mc_banm :config:*] {
   lappend mc_banm(info:vars) [list $temp(name) $temp(value)]
@@ -129,49 +140,147 @@ foreach {temp(name) temp(value)} [array get mc_banm :config:*] {
 set mc_banm(info:loc) [info script]
 array set mc_banm [list \
   script                 "Ban Mask" \
-  version                "v1.4.1" \
+  version                "v1.4.2" \
   svs:script             "banmask" \
-  svs:version            "001004001000" \
-  svs:client_version     "v4.0.1" \
-  svs:client_svs_version "004000001000" \
+  svs:version            "001004002000" \
+  svs:client_version     "v4.1.2" \
+  svs:client_svs_version "004001002000" \
   svs:server             "mc.svs.purehype.net" \
-  svs:port               "81" \
+  svs:port               "80" \
   svs:get                "/index.tcl"]
 set mc_banm(svs:query)    "svs=$mc_banm(svs:script)&"
 append mc_banm(svs:query) "version=$mc_banm(svs:version)&"
-append mc_banm(svs:query) "svs_version=$mc_banm(svs:client_svs_version)"
+append mc_banm(svs:query) \
+  "svs_version=$mc_banm(svs:client_svs_version)"
 
-if {![info exists numversion] || ($numversion < "1061300")} {
+if {![info exists numversion] || 
+    ([string range $numversion 0 4] < "10614") ||
+    (([string range $numversion 0 4] == "10614") &&
+     ([string range $numversion 5 6] != "00"))} {
   set temp(tag) "$mc_banm(script) $mc_banm(version)"
- putloglev o * "$temp(tag) by MC_8 will only work on eggdrop 1.6.13 or greater."
- putloglev o * "$temp(tag)  will not work with eggdrop $version."
- putloglev o * "$temp(tag)  not loaded."
-  return 1
+  putloglev o * \
+    "$temp(tag) by MC_8 will only work on eggdrop 1.6.14 (stable) or greater."
+  putloglev o * "$temp(tag) will not work with eggdrop $version."
+  putloglev o * "$temp(tag) not loaded."
+  uplevel #0 {
+    if {[info exists temp] && ![array exists temp]} {unset temp}
+    set temp(svs_return) [list 0 "Need to upgrade eggdrop."]
+  }; return 1
+}
+## ^
+
+if {![info exists tcl_version] || ($tcl_version < "8.4")} {
+  set temp(tag) "$mc_banm(script) $mc_banm(version)"
+  putloglev o * "$temp(tag) by MC_8 will only work with TCL 8.4 or greater."
+  set temp() "[expr {[info exists tcl_version]?$tcl_version:"unknown"}] ("
+  append temp() [expr {[info exists tcl_patchLevel]?$tcl_patchLevel:"unknown"}]
+  append temp() ")"
+  putloglev o * "$temp(tag) will not work with TCL $temp()."
+  putloglev o * "$temp(tag) not loaded."
+  uplevel #0 {
+    if {[info exists temp] && ![array exists temp]} {unset temp}
+    set temp(svs_return) [list 0 "Need to upgrade TCL."]
+  }; return 1
 }
 
-# Error system, v3.0
-proc mc:banm:error {command error arg} {
-  global mc_banm version lastbind errorInfo
-  putlog "Error in script $mc_banm(script) $mc_banm(version)."
-  putlog "    Error System: v3.0"
-  putlog "       Last Bind: [expr {[info exists lastbind]?$lastbind:"-NULL-"}]"
-  putlog "         Command: $command"
-  putlog "       Arguments: $arg"
-  putlog "       Error Msg: $error"
-  putlog "    Egg. Version: [expr {[info exists version]?$version:"-NULL-"}]"
-  putlog "     TCL Version: [info tclversion]"
-  putlog "  TCL Patchlevel: [info patchlevel]"
-  putlog "*** Please submit this bug so MC_8 can fix it.  Visit"
-  putlog "*** http://mc.purehype.net/bugzilla/ to properly report the bug."
-  putlog \
-    "*** Please include ALL info. in the bug report, including the next(s)."
-  error $errorInfo
-}
+# Error Catching System (ECS), v4.1.
+proc mc:banm:errchk {command args} {
+  
+  # Enable (1) or disable (0) auto reporting of bugs to mc8@purehype.net.
+  # This setting here for those who want to disable it in fear of privacy
+  # violations.
+  set enable_auto_reporting 1
+  
+  if {![info exists ::lastCommand]} {set ::lastCommand [list]}
+  set ::lastCommand \
+    "[list [list [clock seconds] $command $args]] $::lastCommand"
+  set ::lastCommand [lrange $::lastCommand 0 4]
+  if {![catch {eval $command $args} return]} {return $return}
+  if {$::errorCode == "mc.ecs.done"} {return -errorcode mc.ecs.done -code error}
+  
+  set temp(lastbind) [expr {[info exists ::lastbind]?$::lastbind:"-NULL-"}]
+  set temp(eversion) [expr {[info exists ::version]?$::version:"-NULL-"}]
+  set message "
+    ************************************
+    (ECS 4.1) Error found in TCL script.
+    --------------
+    Script name   : $::mc_banm(script)
+    Script version: $::mc_banm(version)
+    Egg. Version  : $temp(eversion)
+    TCL Version   : [info tclversion] ([info patchlevel])
+    --------------
+    Last Bind     : $temp(lastbind)
+    Last Commands :"
+  foreach line $::lastCommand {
+    foreach {time command arg} $line break
+    append message "\n        ${time}- $command $arg"
+  }
+  append message "\n    Error stack   :"
+  foreach line [split $::errorInfo \n] {
+    append message "\n        $line"
+  }
+  append message "\n    --------------"
+  
+  set message [lrange [split $message \n] 1 end]
+  set offset [string first * [lindex $message 0]]
+  set new_message [list]
+  foreach line $message {lappend new_message [string range $line $offset end]}
+  set message $new_message
+  
+  if {!$enable_auto_reporting ||
+      [catch {socket -async mc.purehype.net 80} sid]} {
+    foreach line $message {putloglev o * $line}
+    putloglev o * "Submit this bug to http://mc.purehype.net/bugzilla/ . If"
+    putloglev o * "you are experiencing problems with bugzilla, contact MC_8"
+    putloglev o * "via email at mc8@purehype.net. Please include all"
+    putloglev o * "information shown here, in this ECS report."
+    putloglev o * "************************************"
+    return -errorcode mc.ecs.done -code error
+  }
+  fconfigure $sid -blocking 0 -buffering line
 
-proc mc:banm:errchk {command arg} {
-  if {![catch {eval $command $arg} return]} {return $return}
-  mc:banm:error $command $return $arg
-  return 0
+  set query [list]
+  # This info is passed should I need to hunt down the bot's owner for more
+  # information.
+  lappend query "Admin   : [expr {[info exists ::admin]?$::admin:""}]"
+  lappend query "Owner   : [expr {[info exists ::owner]?$::owner:""}]"
+  lappend query "Botnick : [expr {[info exists ::botnick]?$::botnick:""}]"
+  lappend query "Server  : [expr {[info exists ::server]?$::server:""}]"
+  lappend query "Channels: [join [lsort -dictionary [channels]] ", "]"
+  lappend query ""
+  
+  foreach line $message {lappend query $line}
+  lappend query "************************************"
+  
+  set new_query [list]
+  foreach line $query {
+    regsub -all -- "(\002|\017|\026|\037)" $line "" line
+    regsub -all -- "\003(\[0-9\]\[0-9\]?(,\[0-9\]\[0-9\]?)?)?" $line "" line
+    regsub -all {\%} $line "%25" line
+    set i [string length $line]
+    while {[regexp {[^a-zA-Z0-9%]} $line toh] && ($i >= 0)} {
+      scan "$toh" %c dec
+      regsub -all -- "\\${toh}" $line "%[format %X $dec]" line
+      incr i -1
+    }; lappend new_query $line
+  }; set query $new_query
+  
+  set query "message=[join $query %0a]"
+  puts $sid "POST /report_bug.tcl HTTP/1.0\
+           \nHost: mc.purehype.net:80\
+           \nContent-type: application/x-www-form-urlencoded\
+           \nContent-Length: [expr [string length $query] +2]"
+  puts $sid \n$query
+  close $sid
+
+  foreach line $message {putloglev o * $line}
+  putloglev o * "Automatically sending bug report to MC_8."
+  putloglev o * "If you have a firewall setup, it may block the sending of this"
+  putloglev o * "report. You can check the status of your bug, as soon as MC_8"
+  putloglev o * "adds it, at http://mc.purehype.net/bugzilla/ ."
+  putloglev o * "************************************"
+  
+  return -errorcode mc.ecs.done -code error
 }
 # ^
 
@@ -180,7 +289,7 @@ setudef flag mc.banmask
 # banmask [channel|'all']
 bind dcc - banmask mc:banm:dcc:banmask
 proc mc:banm:dcc:banmask {handle index argument} {
-  return [mc:banm:errchk mc:banm:dcc:banmask_ [list $handle $index $argument]]
+  return [mc:banm:errchk mc:banm:dcc:banmask_ $handle $index $argument]
 }
 proc mc:banm:dcc:banmask_ {handle index argument} {
   global mc_banm
@@ -236,7 +345,7 @@ proc mc:banm:dcc:banmask_ {handle index argument} {
 # +banmask [channel] <nick!ident@host | *word*> [reason]
 bind dcc - +banmask mc:banm:dcc:+banmask
 proc mc:banm:dcc:+banmask {handle index argument} {
-  return [mc:banm:errchk mc:banm:dcc:+banmask_ [list $handle $index $argument]]
+  return [mc:banm:errchk mc:banm:dcc:+banmask_ $handle $index $argument]
 }
 proc mc:banm:dcc:+banmask_ {handle index argument} {
   global mc_banm
@@ -296,7 +405,7 @@ proc mc:banm:dcc:+banmask_ {handle index argument} {
 # -banmask [channel] <nick!ident@host | *word*>
 bind dcc - -banmask mc:banm:dcc:-banmask
 proc mc:banm:dcc:-banmask {handle index argument} {
-  return [mc:banm:errchk mc:banm:dcc:-banmask_ [list $handle $index $argument]]
+  return [mc:banm:errchk mc:banm:dcc:-banmask_ $handle $index $argument]
 }
 proc mc:banm:dcc:-banmask_ {handle index argument} {
   global mc_banm
@@ -355,7 +464,7 @@ proc mc:banm:dcc:-banmask_ {handle index argument} {
 bind part - * mc:banm:part
 proc mc:banm:part {nick uhost handle channel argument} {
   return \
-   [mc:banm:errchk mc:banm:part_ [list $nick $uhost $handle $channel $argument]]
+   [mc:banm:errchk mc:banm:part_ $nick $uhost $handle $channel $argument]
 }
 proc mc:banm:part_ {nick uhost handle channel argument} {
   if {([isbotnick $nick]) && (![validchan $channel])} {
@@ -368,7 +477,7 @@ proc mc:banm:part_ {nick uhost handle channel argument} {
 bind nick - * mc:banm:nick
 proc mc:banm:nick {nick uhost handle channel newnick} {
   return \
-    [mc:banm:errchk mc:banm:nick_ [list $nick $uhost $handle $channel $newnick]]
+    [mc:banm:errchk mc:banm:nick_ $nick $uhost $handle $channel $newnick]
 }
 proc mc:banm:nick_ {nick uhost handle channel newnick} {
   if {![isbotnick $newnick] && [validchan $channel]} {
@@ -378,7 +487,7 @@ proc mc:banm:nick_ {nick uhost handle channel newnick} {
 
 bind join - * mc:banm:join
 proc mc:banm:join {nick uhost handle channel} {
-  return [mc:banm:errchk mc:banm:join_ [list $nick $uhost $handle $channel]]
+  return [mc:banm:errchk mc:banm:join_ $nick $uhost $handle $channel]
 }
 proc mc:banm:join_ {nick uhost handle channel} {
   if {[isbotnick $nick]} {
@@ -393,12 +502,12 @@ proc mc:banm:join_ {nick uhost handle channel} {
 
 bind evnt - save mc:banm:evnt:save
 proc mc:banm:evnt:save {type} {
-  return [mc:banm:errchk mc:banm:evnt:save_ [list $type]]
+  return [mc:banm:errchk mc:banm:evnt:save_ $type]
 }
 proc mc:banm:evnt:save_ {type} {mc:banm:list save}
 
 proc mc:banm:list {command {argument ""}} {
-  return [mc:banm:errchk mc:banm:list_ [list $command $argument]]
+  return [mc:banm:errchk mc:banm:list_ $command $argument]
 }
 proc mc:banm:list_ {command {argument ""}} {
   global mc_banm botnet-nick botnick
@@ -565,16 +674,18 @@ proc mc:banm:list_ {command {argument ""}} {
       if {(!$warned) &&
           ([regexp -- {^(-3|-2|-1)$} $mc_banm(:config:pre:pun)])} {
         switch -- $mc_banm(:config:pre:pun) {
-          "-3" {puthelp "NOTICE $nick :$reason" ; set done "/notice"}
-          "-2" {puthelp "PRIVMSG $nick :$reason"; set done "/msg"}
+          "-3" {putserv "NOTICE $nick :$reason" ; set done "/notice"}
+          "-2" {putserv "PRIVMSG $nick :$reason"; set done "/msg"}
           default {set done ""}
         }
         if {$done != ""} {
           set temp() "$nick ($uhost) \[$channel\] was warned via"
-          putlog "$mc_banm(script): $temp() $done.  Match: [lindex $match 1]"
+          putloglev o * "$mc_banm(script): $temp() $done.  Match: [lindex $match 1]"
         }
         if {$mc_banm(:config:warn:time)} {
-          utimer $mc_banm(:config:warn:time) \
+          set number $mc_banm(:config:warn:time)
+          if {[lindex [split [expr $number/2.] .] 1]} {incr number}
+          utimer $number \
             [list mc:banm:list scan [list $nick $uhost $handle $channel 1]]
         }
       }
@@ -594,7 +705,7 @@ proc mc:banm:list_ {command {argument ""}} {
           set x "/banned from $channel. Ban duration: $temp()."
         }
         putserv "KICK $channel $nick :$reason"
-        putlog \
+        putloglev o * \
           "$mc_banm(script): $nick ($uhost) was kick$x  Match [lindex $match 1]"
       }; return 1
     }
@@ -809,8 +920,9 @@ proc mc:banm:chanflag {{args ""}} {
 ## End of More Tools quick procs.
 
 
-utimer 1 [list mc:banm:list load]
+utimer 2 [list mc:banm:list load]
 
+## SVS insert (post code)
 if {![info exists mc_banm(:config:svs:enable)] ||
     ![string match {[01]} $mc_banm(:config:svs:enable)]} {
   set mc_banm(:config:svs:enable) 0
@@ -821,34 +933,52 @@ proc mc:banm:do_svs {{args ""}} {
   global mc_banm
   set query $mc_banm(svs:query)
   if {$args == ""} {append query "&log=0"}
-  set index [connect $mc_banm(svs:server) $mc_banm(svs:port)]
-  putdcc $index "GET $mc_banm(svs:get)?$query HTTP/1.0\n"
-  putdcc $index "Host: $mc_banm(svs:server):$mc_banm(svs:port)\n\n"
-  control $index mc:banm:svs_talk
+  if {[catch {connect $mc_banm(svs:server) $mc_banm(svs:port)} ind]} {
+    set temp(1) "SVS problem connecting to $mc_banm(svs:server)"
+    set temp(2) "on port $mc_banm(svs:port)"
+    putloglev d * "$mc_banm(script): $temp(1) $temp(2):  $ind"
+    return 0
+  }
+  putdcc $ind "GET $mc_banm(svs:get)?$query HTTP/1.0\n"
+  putdcc $ind "Host: $mc_banm(svs:server):$mc_banm(svs:port)\n\n"
+  control $ind mc:banm:svs_talk
+}
+
+proc mc:banm:svs_memory {action} {
+  global mc_banm
+  switch -- $action {
+    
+    "setup" {
+      upvar index index
+      foreach _item [list header memory rfc_memory] {
+        upvar $_item $_item
+        set $_item [list svs $_item $index]
+      }
+    }
+    
+    "remove" {
+      upvar index index
+      mc:banm:svs_memory setup
+      catch {unset mc_banm($header)}
+      catch {unset mc_banm($memory)}
+      foreach _item [array names mc_banm $rfc_memory:*] {unset mc_banm($_item)}
+    }
+
+  }
 }
 
 proc mc:banm:svs_talk {index text} {
   global mc_banm
-  set header [list svs header $index]
-  set memory [list svs memory $index]
+  mc:banm:svs_memory setup
   if {$text == ""} {
-    catch {unset mc_banm($header)}
-    catch {unset mc_banm($memory)}
+    mc:banm:svs_memory remove
     return 1
   }
   set text [split $text]
   set rfc [lindex $text 0]
   set text [join [lrange $text 1 end]]
-  if {![info exist mc_banm($header)]} {
-    if {$rfc == "002"} {
-      # Done with http header and useless information.
-      if {!$mc_banm(:config:svs:enable)} {
-        catch {unset mc_banm($header)}
-        catch {unset mc_banm($memory)}
-        return 1
-      }
-      set mc_banm($header) 1
-    }
+  if {![info exists mc_banm($header)]} {
+    if {$rfc == "002"} {set mc_banm($header) 1}
     return 0
   }
   switch -- $rfc {
@@ -859,22 +989,61 @@ proc mc:banm:svs_talk {index text} {
 
     010 {
       if {$text != $mc_banm(svs:script)} {
-        set temp(1) "wanted $mc_banm(svs:script), got $temp(text:0)"
+        set temp(1) "wanted $mc_banm(svs:script), got $text"
         putloglev d * "$mc_banm(script): SVS Error: $temp(1)"
-        catch {unset mc_banm($header)}
-        catch {unset mc_banm($memory)}
+        mc:banm:svs_memory remove
         return 1
       }
+      if {$mc_banm(:config:svs:enable)} {return 0}
+      set mc_banm($rfc_memory:[string index $rfc end]) $text
       return 0
     }
 
-    011 {return 0}
-    012 {return 0}
-    013 {return 0}
-    014 {return 0}
-    017 {return 0}
+    011 {
+      if {$mc_banm(:config:svs:enable)} {return 0}
+      set mc_banm($rfc_memory:[string index $rfc end]) $text
+      return 0
+    }
+      
+    012 {
+      if {$mc_banm(:config:svs:enable)} {return 0}
+      set mc_banm($rfc_memory:[string index $rfc end]) $text
+      return 0
+    }
+    
+    013 {
+      if {$mc_banm(:config:svs:enable)} {return 0}
+      set mc_banm($rfc_memory:[string index $rfc end]) $text
+      return 0
+    }
+    
+    014 {
+      if {$mc_banm(:config:svs:enable)} {return 0}
+      set mc_banm($rfc_memory:[string index $rfc end]) $text
+      return 0
+    }
+    
+    017 {
+      if {$mc_banm(:config:svs:enable)} {return 0}
+      if {$text == ""} {
+        set text "Newer version of this script exists."
+      }
+      foreach number [list 0 1 2 3 4] {
+        if {![info exists mc_banm($rfc_memory:$number)]} {continue}
+        regsub -all -- %$number $text $mc_banm($rfc_memory:$number) text
+      }
+      putloglev o * "SVS, $mc_banm(script): $text"
+      mc:banm:svs_memory remove
+      return 1
+    }
 
     004 {
+      # Quit.
+      if {!$mc_banm(:config:svs:enable)} {
+        mc:banm:svs_memory remove
+        return 1
+      }
+        
       if {[info exists mc_banm($memory)]} {
         set file $mc_banm(info:loc)~new
         set temp(vars) $mc_banm(info:vars)
@@ -888,12 +1057,13 @@ proc mc:banm:svs_talk {index text} {
               set item_name [lindex $item 0]
               set item_value [lindex $item 1]
               if {$name != $item_name} {continue}
-              set index [lsearch -exact $temp(vars) $item]
-              set temp(vars) [lreplace $temp(vars) $index $index]
+              set lsearch_index [lsearch -exact $temp(vars) $item]
+              set temp(vars) \
+                [lreplace $temp(vars) $lsearch_index $lsearch_index]
               puts $io [list set mc_banm($name) $item_value]
               if {$type == "\{"} {
                 while {1} {
-                  if {[regexp -- {\}(?:;* *(.*))?} $line -> extra]} {
+                  if {[regexp -- {\}(?:[; ][; ]*(.*))?} $line -> extra]} {
                     if {$extra != ""} {
                       puts $io $extra
                     }
@@ -906,8 +1076,8 @@ proc mc:banm:svs_talk {index text} {
               } elseif {$type == "\""} {
                 regsub -- {"} $line "" line
                 while {1} {
-                  if {[regexp -- {[^\\]"(?:;* *(.*))?} $line -> extra] ||
-                      [regexp -- {^"(?:;* *(.*))?} $line -> extra]} {
+                  if {[regexp -- {[^\\]"(?:[; ][; ]*(.*))?} $line -> extra] ||
+                      [regexp -- {^"(?:[; ][; ]*(.*))?} $line -> extra]} {
                     if {$extra != ""} {
                       puts $io $extra
                     }
@@ -928,20 +1098,45 @@ proc mc:banm:svs_talk {index text} {
         close $io
         set file $mc_banm(info:loc)
         putloglev o * "$mc_banm(script): Auto update testing new script..."
-        if {[catch {uplevel "source $file~new"} error]} {
+        if {[catch {uplevel "source $file~new"}]} {
           file delete -force -- $file~new
-          putloglev o * "$mc_banm(script): Auto update failed: $error"
-          putloglev o * "$mc_banm(script): Auto update loading previous script."
+          putloglev o * "$mc_banm(script): Auto update failed:"
+          putloglev o * $::errorInfo
+          putloglev o * \
+            "$mc_banm(script): Loading previous script version..."
           uplevel "source $file"
         } else {
-          file rename -force -- $file~new $file
-          putloglev o * "$mc_banm(script): Auto update test good, reloading."
-          uplevel "source $file"
+          upvar #0 temp upvar_temp
+          if {[info exists upvar_temp(svs_return)]} {
+            set temp(return_code) [lindex $upvar_temp(svs_return) 0]
+            set temp(return_arg) [lindex $upvar_temp(svs_return) 1]
+            
+            if {!$temp(return_code)} {
+              file delete -force -- $file~new
+              set temp() "message from new version: $temp(return_arg)"
+              putloglev o * "$mc_banm(script): Auto update failed, $temp()"
+              putloglev o * \
+                "$mc_banm(script): Loading previous script version..."
+              uplevel "source $file"
+            } else {
+              file rename -force -- $file~new $file
+              set temp() "good, message from new version: $temp(return_arg)"
+              putloglev o * "$mc_banm(script): Auto update test $temp()"
+              putloglev o * \
+                "$mc_banm(script): Moving and reloading new version..."
+              uplevel "source $file"
+            }
+          } else {
+            file rename -force -- $file~new $file
+            putloglev o * "$mc_banm(script): Auto update test good."
+            putloglev o * \
+              "$mc_banm(script): Moving and reloading new version..."
+            uplevel "source $file"
+          }
         }
       }
 
-      catch {unset mc_banm($header)}
-      catch {unset mc_banm($memory)}
+      mc:banm:svs_memory remove
       return 1
     }
 
@@ -952,30 +1147,48 @@ proc mc:banm:svs_talk {index text} {
       set temp(cache) "$temp(host) at $temp(port)"
       putloglev d * \
         "$mc_banm(script): SVS is being redirected to $temp(cache)."
-      utimer 5 [list mc:banm:do_svs_ $temp(host) $temp(port) $temp(get)]
-      catch {unset mc_banm($header)}
-      catch {unset mc_banm($memory)}
+      utimer 6 [list mc:banm:do_svs_ $temp(host) $temp(port) $temp(get)]
+      mc:banm:svs_memory remove
       return 1
     }
 
     300 {
-      lappend mc_banm($memory) $text
-      return 0
+      if {$mc_banm(:config:svs:enable)} {
+        lappend mc_banm($memory) $text
+      }; return 0
     }
 
   }
 }
 catch {unset index}
-if {![info exists mc_loaded]} {set mc_loaded(scripts) ""}
+if {![info exists mc_loaded]} {set mc_loaded(scripts) [list]}
+if {![array exists mc_loaded]} {unset mc_loaded; set mc_loaded(scripts) [list]}
 set index [lsearch -exact $mc_loaded(scripts) mc_banm]
-lreplace mc_loaded(scripts) $index $index mc_banm
+set mc_loaded(scripts) [lreplace $mc_loaded(scripts) $index $index mc_banm]
+## ^
 
-putlog "$mc_banm(script) $mc_banm(version) by MC_8 loaded."
-
+putloglev o * "$mc_banm(script) $mc_banm(version) by MC_8 loaded."
 
 ##
 # History  ( <Fixed by> - [Found by] - <Info> )
 ##
+# v1.4.2 (10.07.03)
+#  MC_8 -             - Changed 'puthelp''s to 'putserv''s (getting in the
+#                       habbit to be ready for eggdrop 1.8, will not support
+#                       it).
+#  MC_8 -             - Moved all 'putlog''s to 'putloglev o *''s (getting in
+#                       the habbit to be ready for eggdrop 1.8, will not support
+#                       it).
+#  MC_8 -             - Adjusted all timers to even numbers -- eggdrop has a bug
+#                       to where strange things happen on odd number timers
+#                       (viewing timer list shows blank on odd number timer
+#                       call).
+#  MC_8 -             - Upgraded ECS. v3.0 -> v4.1
+#  MC_8 -             - Upgraded SVS Client.  v4.0.1 -> v4.1.2
+#  MC_8 - Mopirelli \ - Script will only work with TCL v8.4 or greater.
+#         Bostjan   \   Bugzilla Bug 233 
+#         Mat
+#
 # v1.4.1 (07.26.03)
 #  MC_8 - Mopirelli - Fixed bot loosing ban mask entries after restart or bot
 #         Bostjan     start.
