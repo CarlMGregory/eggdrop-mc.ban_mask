@@ -1,5 +1,5 @@
 ##
-# Ban Mask v1.4
+# Ban Mask v1.4.1
 #  by MC_8 - Carl M. Gregory <mc8@purehype.net>
 #  This script will only run on eggdrop 1.6.13 or greater.
 #
@@ -34,7 +34,7 @@
 #   This will remove a mask ban.
 #
 # If you do not specify [channel] it will be considered as global.
-# <nick!ident@host | *word*> can contain wildcards.
+# <nick!ident@host | *word*> can contain wild cards.
 #
 # chanset [channel] <+/->mc.banmask
 #   Setting this will enable, +, or disable, -, the script for the given
@@ -68,7 +68,7 @@ set mc_banm(:config:pre:pun) -3
 # give the user before scanning them again?  Set this to 0 to disable.
 set mc_banm(:config:warn:time) 60
 
-# If the user is still in violation after the rescan (if enabled), what do
+# If the user is still in violation after the re scan (if enabled), what do
 # you want the script to do?
 # -1 = Kick
 #  0 = Server Ban
@@ -129,9 +129,9 @@ foreach {temp(name) temp(value)} [array get mc_banm :config:*] {
 set mc_banm(info:loc) [info script]
 array set mc_banm [list \
   script                 "Ban Mask" \
-  version                "v1.4" \
+  version                "v1.4.1" \
   svs:script             "banmask" \
-  svs:version            "001004000000" \
+  svs:version            "001004001000" \
   svs:client_version     "v4.0.1" \
   svs:client_svs_version "004000001000" \
   svs:server             "mc.svs.purehype.net" \
@@ -403,7 +403,9 @@ proc mc:banm:list {command {argument ""}} {
 proc mc:banm:list_ {command {argument ""}} {
   global mc_banm botnet-nick botnick
 
-  if {![file exists $mc_banm(:config:datafile)]} {close [open $mc_banm(:config:datafile) w]}
+  if {![file exists $mc_banm(:config:datafile)]} {
+    close [open $mc_banm(:config:datafile) w]
+  }
   if {![info exists mc_banm(:list:)]} {set mc_banm(:list:) ""}
 
   switch -- $command {
@@ -454,26 +456,37 @@ proc mc:banm:list_ {command {argument ""}} {
         }
       }; return $temp()
     }
+    
     "load" {
+      if {$argument != "-q"} {
+        putloglev o * "Reading $mc_banm(script) file..."
+      }
+      
       set mc_banm(:list:) ""
       set io [open $mc_banm(:config:datafile) r]
       while {![eof $io]} {
         gets $io line
 
-        set line [split $line]
-        if {[lindex $line 0] != "x"} {continue}
-        set line [join [lrange $line 1 end]]
+        if {([catch {llength $line} length]) ||
+            ($length != "4") ||
+            ([lindex $line 0] != "x")} {continue}
+        set line [lrange $line 1 end]
+        set channel [lindex $line 0]
 
-        if {([string trim $line " "] == "") ||
-            ([catch {llength $line} output]) ||
-            ($output != "3") ||
-            (([set channel [lindex $line 0]] != "") &&
-             ((![validchan $channel]) ||
-              (![mc:banm:chanflag $channel mc.banmask])))} {continue}
+        if {($channel != "") &&
+            ((![validchan $channel]) ||
+             (![mc:banm:chanflag $channel mc.banmask]))} {continue}
 
         lappend mc_banm(:list:) $line
       }; close $io
+      
+      if {$argument != "-q"} {
+        set number [llength $mc_banm(:list:)]
+        set s [expr {($number == "1")?"":"s"}]
+        putloglev o * "$mc_banm(script): Loaded $number record$s."
+      }
     }
+
     "match" {
       mc:banm:unlist $argument channel nuhost
       set nuhost [string tolower $nuhost]
@@ -512,7 +525,7 @@ proc mc:banm:list_ {command {argument ""}} {
     }
     "save" {
       if {$argument != "-q"} {
-        putloglev o * "Saving $mc_banm(script) file ..."
+        putloglev o * "Writing $mc_banm(script) file ..."
       }
 
       set io [open $mc_banm(:config:datafile) w]
@@ -549,7 +562,8 @@ proc mc:banm:list_ {command {argument ""}} {
         %ident   $ident \
         %host    $host]]
 
-      if {(!$warned) && ([regexp -- {^(-3|-2|-1)$} $mc_banm(:config:pre:pun)])} {
+      if {(!$warned) &&
+          ([regexp -- {^(-3|-2|-1)$} $mc_banm(:config:pre:pun)])} {
         switch -- $mc_banm(:config:pre:pun) {
           "-3" {puthelp "NOTICE $nick :$reason" ; set done "/notice"}
           "-2" {puthelp "PRIVMSG $nick :$reason"; set done "/msg"}
@@ -567,16 +581,16 @@ proc mc:banm:list_ {command {argument ""}} {
 
       set array [expr {$warned?"post":"pre"}]
 
-      if {$mc_banm(${array}:pun) >= "-1"} {
+      if {$mc_banm(:config:${array}:pun) >= "-1"} {
         set x "ed from $channel."
-        if {$mc_banm(${array}:pun) != "-1"} {
+        if {$mc_banm(:config:${array}:pun) != "-1"} {
           putserv "MODE $channel +b $banmask"
           set x "/banned from $channel."
         }
-        if {$mc_banm(${array}:pun) >= "1"} {
+        if {$mc_banm(:config:${array}:pun) >= "1"} {
           newchanban $channel $banmask ${botnet-nick} $reason \
-            $mc_banm(${array}:pun) none
-          set temp() [duration [expr $mc_banm(${array}:pun)*60]]
+            $mc_banm(:config:${array}:pun) none
+          set temp() [duration [expr $mc_banm(:config:${array}:pun)*60]]
           set x "/banned from $channel. Ban duration: $temp()."
         }
         putserv "KICK $channel $nick :$reason"
@@ -795,7 +809,7 @@ proc mc:banm:chanflag {{args ""}} {
 ## End of More Tools quick procs.
 
 
-mc:banm:list load
+utimer 1 [list mc:banm:list load]
 
 if {![info exists mc_banm(:config:svs:enable)] ||
     ![string match {[01]} $mc_banm(:config:svs:enable)]} {
@@ -962,6 +976,15 @@ putlog "$mc_banm(script) $mc_banm(version) by MC_8 loaded."
 ##
 # History  ( <Fixed by> - [Found by] - <Info> )
 ##
+# v1.4.1 (07.26.03)
+#  MC_8 - Mopirelli - Fixed bot loosing ban mask entries after restart or bot
+#         Bostjan     start.
+#         Normand     Bugzilla Bug 234
+#                     Bugzilla Bug 320
+#  MC_8 - Normand   - Fixed 'can't read "mc_banm(pre:pun)": no such element in
+#                     array'.
+#                     Bugzilla Bug 320
+#
 # v1.4 (07.17.03)
 #  MC_8 - - Upgraded SVS client.  v3.1.1 -> v4.0.1
 #  MC_8 - - Fixed 'illegal channel: *'.
@@ -1002,5 +1025,5 @@ putlog "$mc_banm(script) $mc_banm(version) by MC_8 loaded."
 #         Kitt        record` when adding global ban's.
 #
 # v1.0 (02.08.01)
-#  MC_8 - Duckman - Inital release.
+#  MC_8 - Duckman - Initial release.
 ##
