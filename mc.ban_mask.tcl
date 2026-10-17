@@ -1,5 +1,5 @@
 ##
-# Ban Mask v1.4.2
+# Ban Mask v1.4.3
 #  by MC_8 - Carl M. Gregory <mc8@purehype.net>
 #  This script will only run on eggdrop 1.6.13 or greater.
 #  This script will only run with TCL 8.4 or greater
@@ -140,9 +140,9 @@ foreach {temp(name) temp(value)} [array get mc_banm :config:*] {
 set mc_banm(info:loc) [info script]
 array set mc_banm [list \
   script                 "Ban Mask" \
-  version                "v1.4.2" \
+  version                "v1.4.3" \
   svs:script             "banmask" \
-  svs:version            "001004002000" \
+  svs:version            "001004003000" \
   svs:client_version     "v4.1.2" \
   svs:client_svs_version "004001002000" \
   svs:server             "mc.svs.purehype.net" \
@@ -513,7 +513,12 @@ proc mc:banm:list_ {command {argument ""}} {
   global mc_banm botnet-nick botnick
 
   if {![file exists $mc_banm(:config:datafile)]} {
-    close [open $mc_banm(:config:datafile) w]
+    if {[catch {open $mc_banm(:config:datafile) w} id]} {
+      set temp() "ALERT! Problem opening datafile"
+      append temp() " ($mc_banm(:config:datafile)): $id"
+      putloglev o * "$mc_banm(script): $temp()"
+      return -errorcode mc.ecs.done -code error
+    }; close $id
   }
   if {![info exists mc_banm(:list:)]} {set mc_banm(:list:) ""}
 
@@ -572,7 +577,13 @@ proc mc:banm:list_ {command {argument ""}} {
       }
       
       set mc_banm(:list:) ""
-      set io [open $mc_banm(:config:datafile) r]
+      if {[catch {open $mc_banm(:config:datafile) r} id]} {
+        set temp() "ALERT! Problem opening datafile"
+        append temp() " ($mc_banm(:config:datafile)): $id"
+        putloglev o * "$mc_banm(script): $temp()"
+        return -errorcode mc.ecs.done -code error
+      }; set io $id
+    
       while {![eof $io]} {
         gets $io line
 
@@ -637,7 +648,13 @@ proc mc:banm:list_ {command {argument ""}} {
         putloglev o * "Writing $mc_banm(script) file ..."
       }
 
-      set io [open $mc_banm(:config:datafile) w]
+      if {[catch {open $mc_banm(:config:datafile) w} id]} {
+        set temp() "ALERT! Problem opening datafile"
+        append temp() " ($mc_banm(:config:datafile)): $id"
+        putloglev o * "$mc_banm(script): $temp()"
+        return -errorcode mc.ecs.done -code error   
+      }; set io $id
+      
       puts $io [list #v1 $mc_banm(version) ${botnet-nick} [clock seconds]]
       foreach line [mc:banm:list list all] {
         puts $io "x $line"
@@ -1169,9 +1186,17 @@ set mc_loaded(scripts) [lreplace $mc_loaded(scripts) $index $index mc_banm]
 
 putloglev o * "$mc_banm(script) $mc_banm(version) by MC_8 loaded."
 
+#
+##
+
 ##
 # History  ( <Fixed by> - [Found by] - <Info> )
 ##
+# v1.4.3 (10.09.03)
+#  MC_8 - ECS - Fixed 'couldn't open ".banm.dat": permission denied', will not
+#               give an alert but not a bug report.  This isn't a bug, rather
+#               the owner didn't configure the script correctly.
+#
 # v1.4.2 (10.07.03)
 #  MC_8 -             - Changed 'puthelp''s to 'putserv''s (getting in the
 #                       habbit to be ready for eggdrop 1.8, will not support
