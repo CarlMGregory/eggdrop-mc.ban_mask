@@ -1,8 +1,8 @@
 ##
-# Ban Mask v1.0
-#  by MC_8 - Carl M. Gregory <gregory@worldinter.net>
+# Ban Mask v1.1 by MC_8 - Carl M. Gregory <gregory@worldinter.net>
 #
-# This script, along with others, are best found at bseen.tclslave.net
+# If you have any questions/comments/idea's, please email me!
+# ( Include the script name and version in the title, if you do email me. )
 #
 # My SVS Website - http://mc.purehype.net/
 ##
@@ -37,6 +37,14 @@
 ##
 # History
 ##
+# v1.1 (06.27.01)
+#  MC_8 - Kitt - Fixed `Tcl error [mc:bm:dcc:banmask]: no such channel record`
+#                   when adding global ban's.  (again)
+#  MC_8 - Kitt - Fixed `extra characters after close-quote`.
+#  MC_8 - Kitt - Added ability to notice warn, insted well as msg warn.
+#  MC_8 - Asarhad - Fixed `Tcl error [mc:bm:dcc:banmask]: no such channel record`
+#                   when adding global ban's.
+#
 # v1.0 (02.08.01)
 #  MC_8 - Duckman - Inital release.
 ##
@@ -49,19 +57,20 @@
 #  Example from dcc chat with the bot:
 #   .chanset #channel +mc.banmask
 
-# What flag'd users do you want the script to ignore?  Set to -|- to ignore
+# What flag'd users do you want the script to ignore?  Set to "-|-" to ignore
 # no one.
-set mc_banm(ig:flag) "-|-"
+set mc_banm(ig:flag) "bmno|mno"
 
 # What do you want to call the datafile?
 set mc_banm(datafile) "scripts/.banm.data"
 
 # If someone is found with a bad mask, what do you want the script to do?
+# -3 = /NOTICE Warn
 # -2 = /MSG Warn
 # -1 = Kick
 #  0 = Server Ban
 #  1 and up is ban time in min's.
-set mc_banm(pre:pun) -2
+set mc_banm(pre:pun) -3
 
 # If the above setting is 0, How long do you want to give them before scanning
 # them again for further punishment?  Set to 0 if you don't wanna rescan.
@@ -130,8 +139,8 @@ set mc_banm(svs:stableonly) 0
 
 ### END OF CONFIG OPTIONS ###
 
-set mc_banm(version) "v1.0"
-set mc_banm(svs:script) "banmask 001000000000"
+set mc_banm(version) v1.1
+set mc_banm(svs:script) "banmask 001001000000"
 set mc_banm(svs:server) "mc.purehype.net 8085"
 
 if {$numversion < "1050000"} {
@@ -198,6 +207,13 @@ proc mc:bm:scan {nick uhost hand chan warned} {
   if {![string match [string tolower *[join [join [split [lindex $ban 1] *]] *]*] [string tolower $mc_temp(banmask)]]} {continue}
   if {!$warned} {
    switch -- $mc_banm(pre:pun) {
+    -3 {
+     puthelp "NOTICE $nick :[mc:bm:inter:replace $mc_banm(warn:msg) "%banmask [lindex $ban 1] %chan $chan %uhost $mc_temp(banmask)"]"
+     putlog "$nick was warned for having [lindex $ban 1] in his mask:  $mc_temp(banmask)."
+     if {$mc_banm(warn:time)} {
+      timer $mc_banm(warn:time) "mc:bm:scan [split $nick] [split $uhost] [split $hand] [split $chan] 1"
+     }
+    }
     -2 {
      puthelp "PRIVMSG $nick :[mc:bm:inter:replace $mc_banm(warn:msg) "%banmask [lindex $ban 1] %chan $chan %uhost $mc_temp(banmask)"]"
      putlog "$nick was warned for having [lindex $ban 1] in his mask:  $mc_temp(banmask)."
@@ -271,7 +287,7 @@ proc mc:bm:dcc:banmask {hand idx args} {
    set archan [string tolower [lindex $args 2]]
    set reason [lrange $args 3 e]
   }
-  if {![mc:bm:inter:chanflagison $chan mc.banmask]} {
+  if {($chan != "global") && ![mc:bm:inter:chanflagison $chan mc.banmask]} {
    putdcc $idx "$chan's banmask isn't turned on.  To turn it on type `.chanset $chan +mc.banmask'"
    return 0
   }
@@ -297,7 +313,7 @@ proc mc:bm:dcc:banmask {hand idx args} {
    set mc_banm(!banmask) "$mc_banm(!banmask) \{[split $chan] [split $archan] [split $reason]\}"
    if {$chan == "global"} {
     foreach xchan [string tolower [channels]] {
-     if {![mc:bm:inter:chanflagison $chan mc.banmask]} {set mc_bm(:$chan:on:) 0;continue}
+     if {![mc:bm:inter:chanflagison $xchan mc.banmask]} {set mc_bm(:$chan:on:) 0;continue}
      set mc_bm(:$chan:on:) 1
      foreach xnick [chanlist $xchan] {
       mc:bm:scan $xnick [getchanhost $xnick $xchan] [nick2hand $xnick $xchan] $xchan 0
