@@ -1,18 +1,21 @@
 ##
-# Ban Mask v1.1 by MC_8 - Carl M. Gregory <gregory@worldinter.net>
+# Ban Mask v1.2 by MC_8 - Carl M. Gregory <mc8@purehype.net>
+#  This script will only run on eggdrop 1.5.5 or greater.
 #
-# If you have any questions/comments/idea's, please email me!
-# ( Include the script name and version in the title, if you do email me. )
-#
-# My SVS Website - http://mc.purehype.net/
+# My SVS Website - http://mc.purehype.net:81/
 ##
 
 ##
 # This script will ban people matching the specific hostmask you give it.
-# I say you can do this with .+ban but Duckman states a script would be
+# I say you can do this with '+ban' but Duckman states a script would be
 # more effecent.  His origional idea was a ban nick script -- but why
 # stop there when you have ident and possibly crude vhosts.  The idea
-# is to ban people that have bad words in there hostmask.
+# is to ban people that have bad words in there hostmask, but not 
+# ban in that specific mask.  Example, set a Ban Mask to *!hell@*,
+# if someone matching that join's, it will ban them via *!*hello@host.com.
+#
+# Something new that makes this script a plus over a normal '+ban' is,
+# the ability to use regular expression matching on Ban Masks.
 ##
 
 ##
@@ -21,32 +24,48 @@
 #
 # This will show you a list of current ban'd masks.
 #  .banmask [#channel]
-# This will add a new mask ban.
-#  .banmask [#channel] [add <word [reason]>]
-# This will remove a mask ban.
-#  .banmask [#channel] [remove <word>]
 #
-# If you specify [#channel] then the command is channel specific, otherwise
-# is is global.  Word will be matched in 3 ways, either the nick, the ident
-# or the host.  If you have a banmask setup as "sex" and someone comes in
-# with foxy!~world@i.am.a.sexy.nut.com or foxy!~sexy@austin.rr.com or
-# allsex1!~world@austin.rr.com they would match the banmask.  "word" can
-# contain "*" wildcards.
+# This will add a new mask ban.
+#  .+banmask [#channel] <nick!ident@host or *word*> [reason]
+#
+# This will remove a mask ban.
+#  .-banmask [#channel] <nick!ident@host or *word*>
+#
+# If you do not specify [#channel] it will be considered as global.
+# <nick!ident@host or *word*> can contain wildcards.
 ##
 
 ##
 # History
 ##
+# v1.2 (11.14.01)
+#  MC_8 - Upgraded SVS v1.2 to v2.0.
+#  MC_8 - Changed 'warn:time' from min.s to sec.s.
+#  MC_8 - Removed 'warn:msg', will use reason supplied when added.
+#  MC_8 - Removed gethost and filt procs, not used.
+#  MC_8 - Added newer version of the replace proc.
+#  MC_8 - Rewrote how it stores and calls on the database information, will
+#         now all go threw 1 procedure (mc:banm:list).
+#  MC_8 - Added newer version of the masktype (host masking) proc.
+#  MC_8 - Added 'access'.
+#  MC_8 - Removed chanflagison, replace with chanflag proc.
+#  MC_8 - Changed the commands up a bit.  To add and remove it's '+/-banmask'
+#         rather than 'banmask add'.
+#
 # v1.1 (06.27.01)
-#  MC_8 - Kitt - Fixed `Tcl error [mc:bm:dcc:banmask]: no such channel record`
+#  MC_8 - Kitt - Fixed `Tcl error [mc:banm:dcc:banmask]: no such channel record`
 #                   when adding global ban's.  (again)
 #  MC_8 - Kitt - Fixed `extra characters after close-quote`.
-#  MC_8 - Kitt - Added ability to notice warn, insted well as msg warn.
-#  MC_8 - Asarhad - Fixed `Tcl error [mc:bm:dcc:banmask]: no such channel record`
+#  MC_8 - Kitt - Added ability to notice warn, instead well as msg warn.
+#  MC_8 - Asarhad - Fixed `Tcl error [mc:banm:dcc:banmask]: no such channel record`
 #                   when adding global ban's.
 #
 # v1.0 (02.08.01)
 #  MC_8 - Duckman - Inital release.
+##
+
+##
+# Settings
 ##
 
 # Note:
@@ -57,12 +76,15 @@
 #  Example from dcc chat with the bot:
 #   .chanset #channel +mc.banmask
 
-# What flag'd users do you want the script to ignore?  Set to "-|-" to ignore
-# no one.
-set mc_banm(ig:flag) "bmno|mno"
+# What flag'd users can use the dcc commands?
+set mc_banm(access) "o|o"
+
+# What flag'd users do you want the script to ignore?  Set to
+# "" to ignore no one.
+set mc_banm(ig:flag) "b|"
 
 # What do you want to call the datafile?
-set mc_banm(datafile) "scripts/.banm.data"
+set mc_banm(datafile) ".banm.dat"
 
 # If someone is found with a bad mask, what do you want the script to do?
 # -3 = /NOTICE Warn
@@ -72,41 +94,47 @@ set mc_banm(datafile) "scripts/.banm.data"
 #  1 and up is ban time in min's.
 set mc_banm(pre:pun) -3
 
-# If the above setting is 0, How long do you want to give them before scanning
-# them again for further punishment?  Set to 0 if you don't wanna rescan.
-# (in min's)
-set mc_banm(warn:time) 1
+# If the above setting is -3, -2, or -1, how long (in sec.s) do you want to
+# give the user before scanning them again?  Set this to 0 to disable.
+set mc_banm(warn:time) 5
 
-# What do you want to say for a warning/kick/ban message?
-# %banmask will be replaced with the ban'd mask word.
-# %chan will be replaced with the current channel.
-# %uhost will be replaced with the users nick!ident@host.
-set mc_banm(warn:msg) "Hiya, you have 1 minute to get rid of %banmask in your hostmask of %uhost, or ya will be booted from %chan."
-
-# If someone is STILL in the violation of the ban'd mask after giving them
-# warning, what do you want the script to do?
+# If the user is still in violation after the rescan (if enabled), what do
+# you want the script to do?
 # -1 = Kick
 #  0 = Server Ban
 #  1 and up is ban time in min's.
 set mc_banm(post:pun) 5
 
 # How do you want to mask the bans?
+#     Default == 5
 #      0 - *!user@host.domain
 #      1 - *!*user@host.domain
 #      2 - *!*@host.domain
 #      3 - *!*user@*.domain
 #      4 - *!*@*.domain
-#      5 - nick!user@host.domain
+#      5 - nick!user@host.domain (utterly useless, just returns <hostmask>)
 #      6 - nick!*user@host.domain
 #      7 - nick!*@host.domain
 #      8 - nick!*user@*.domain
 #      9 - nick!*@*.domain
-#     You can also specify a type of 10 to 19 which correspond to masks 0 to 9, but
-#     instead of using a * wildcard to replace portions of the host.domain, it uses ?
-#     wildcards to replace the numbers in the address.
+#     You can also specify a type of 10 to 19 which correspond to masks 0 
+#     to 9.  But if the host.domain is a;
+#       hostname = Instead of using a * wildcard to replace portions of the
+#                  host.domain, it replaces the numbers in the host.domain 
+#                  with a '?' (question mark) wildcard
+#       ip       = It will mask as normal, with no '?' (question mark)
+#                  replacments as does hostname.
 set mc_banm(banmask) 3
 
-## MC SVS (Script Version Server) v1.2 ##
+# [0=no/1=yes] Do you want to use regular expression matching rather than
+# normal wildcarded matching?  Warning, regular expressions are advanced.
+# If you don't know how to use regular expressions... do not turn this on.
+# http://tcl.activestate.com/man/tcl8.3/TclCmd/re_syntax.htm#M2
+# http://dev.scriptics.com/doc/howto/regexp81.html
+set mc_banm(use:regexp) 0
+
+
+## MC SVS (Script Version Service) v2.0 ##
 # Do you want the bot to connection to MC_8's SVS to see if there are newer versions
 # of this script avilable?  It will only tell you -- It's up to you to get the newest
 # version (I decided not to auto update the code, there may be new features in the
@@ -117,16 +145,16 @@ set mc_banm(svs:enabled) 1
 # Once a day the script will check with the SVS -- this specifies when
 # that should happen.  The setting should be the hour (military).
 # examples:
-#  set mc_banm(svs:check) 0  ;#This is at Midnight
-#  set mc_banm(svs:check) 5  ;#This is at 5am
+#  set mc_banm(svs:check) 0   ;#This is at Midnight
+#  set mc_banm(svs:check) 5   ;#This is at 5am
 #  set mc_banm(svs:check) 13  ;#This is at 1pm
 #  set mc_banm(svs:check) 23  ;#This is at 11pm
 set mc_banm(svs:check) 3
 
-# Upon finding a newer version, who do you want to notify via note?
-# Only the admin of the bot should really be worried about these notes,
-# there the ones that keep everything up to par on the bots.
-# Seperate each user with a " " (space).
+# Upon finding a newer version of this script, who do you want this script
+# to send a note to telling them of this newer version?
+# If more than 1 user is to be notified, seperate each user with a
+# ' ' (space).
 set mc_banm(svs:notify) "MC_8"
 
 # Do you want even beta version notified to whomever you have set?  Or just
@@ -137,443 +165,394 @@ set mc_banm(svs:stableonly) 0
 
 
 
-### END OF CONFIG OPTIONS ###
 
-set mc_banm(version) v1.1
-set mc_banm(svs:script) "banmask 001001000000"
-set mc_banm(svs:server) "mc.purehype.net 8085"
+##
+# TCL coding below, do not proceed unless
+# you know what your doing.
+##
 
-if {$numversion < "1050000"} {
- putlog "Ban Mask $mc_sf(version) by MC_8 is for eggdrop 1.5+ series only."
- putlog "Ban Mask $mc_sf(version) will not work with eggdrop $version."
- putlog "Ban Mask $mc_sf(version) not loaded."
+set mc_banm(script)      "Ban Mask"
+set mc_banm(version)     "v1.2"
+set mc_banm(svs:script)  "banmask"
+set mc_banm(svs:version) "001002000000"
+set mc_banm(svs:server)  "mc.purehype.net"
+set mc_banm(svs:port)    "81"
+set mc_banm(svs:get)     "/"
+set mc_banm(svs:query)   "svs=$mc_banm(svs:script)&version=$mc_banm(svs:version)"
+
+if {$numversion < "1050500"} {
+ putlog "$mc_banm(script) $mc_banm(version) by MC_8 will only work on eggdrop 1.5.5 or greater."
+ putlog "$mc_banm(script) $mc_banm(version)  will not work with eggdrop $version."
+ putlog "$mc_banm(script) $mc_banm(version)  not loaded."
  return 1
-};setudef flag mc.banmask
-
-utimer 1 mc:bm:init
-proc mc:bm:init {} {
- global mc_bm
- foreach chan [string tolower [channels]] {
-  if {[mc:bm:inter:chanflagison $chan mc.banmask]} {set mc_bm(:$chan:on:) 1} {
-   set mc_bm(:$chan:on:) 0
-  }
- };utimer 30 mc:bm:chanscan
 }
 
-proc mc:bm:chanscan {} {
- global mc_bm
- foreach chan [string tolower [channels]] {
-  if {[mc:bm:inter:chanflagison $chan mc.banmask]} {
-   if {!$mc_bm(:$chan:on:)} {
-    foreach user [chanlist $chan] {
-     mc:bm:scan $user [getchanhost $user $chan] [nick2hand $user] $chan 0
-    }
-   };set mc_bm(:$chan:on:) 1
-  } {set mc_bm(:$chan:on:) 0}
+setudef flag mc.banmask
+
+bind part - * mc:banm:part
+proc mc:banm:part {nick uhost hand chan arg} {
+ global botnick
+ if {([string tolower $nick] == [string tolower $botnick]) &&
+     (![validchan $chan])} {
+  foreach line [mc:banm:list list $chan] {
+#   if {[string tolower [lindex $line 0]] != [string tolower $chan]} {continue}
+   mc:banm:list remove $chan [lindex $line 1]
+  }
  }
 }
 
-bind nick - * mc:bm:nick
-proc mc:bm:nick {nick uhost hand chan newnick} {
+bind nick - * mc:banm:nick
+proc mc:banm:nick {nick uhost hand chan newnick} {
  global botnick
- if {$newnick != $botnick} {mc:bm:scan $newnick $uhost $hand $chan 0}
+ if {[string tolower $newnick] != [string tolower $botnick]} {
+  mc:banm:scan $newnick $uhost $hand $chan
+ }
 }
 
-bind join - * mc:bm:join
-proc mc:bm:join {nick uhost hand chan} {
+bind join - * mc:banm:join
+proc mc:banm:join {nick uhost hand chan} {
  global botnick
- if {$nick == $botnick} {
+ if {[string tolower $nick] == [string tolower $botnick]} {
   foreach user [chanlist $chan] {
-   mc:bm:scan $user [getchanhost $user $chan] [nick2hand $user] $chan 0
+   mc:banm:scan $user [getchanhost $user $chan] [nick2hand $user] $chan
   }
- } {mc:bm:scan $nick $uhost $hand $chan 0}
+ } else {mc:banm:scan $nick $uhost $hand $chan}
 }
 
-proc mc:bm:scan {nick uhost hand chan warned} {
- global mc_banm botnick
- set chan [string tolower $chan]
- if {($nick == $botnick) || (![onchan $nick $chan]) ||
-     (![mc:bm:inter:chanflagison $chan mc.banmask])} {return}
- set i 0
- foreach ban $mc_banm(!banmask) {
-  if {([string tolower [lindex $ban 0]] == [string tolower $chan]) ||
-      ([string tolower [lindex $ban 0]] == "global")} {set i 1;break}
+proc mc:banm:scan {nick uhost hand chan {warned 0}} {
+ global mc_banm botnick {botnet-nick}
+ if {([string tolower $nick] == [string tolower $botnick]) ||
+     (![onchan $nick $chan]) || (![isop $botnick $chan]) ||
+     (![mc:banm:chanflag $chan mc.banmask]) ||
+     (([matchattr $hand $mc_banm(ig:flag) $chan]) && ($mc_banm(ig:flag) != "")) ||
+     ([set match [mc:banm:list match $chan $nick!$uhost]] == "")} {return 0}
+ set banmask [mc:banm:masktype $nick!$uhost $mc_banm(banmask)]
+ scan $uhost {%[^@]@%s} ident host
+ set reason [mc:banm:replace [lindex $match 2] [list %match [lindex $match 1] %banmask $banmask %chan $chan %nick $nick %ident $ident %host $host]]
+ if {!$warned} {set array "pre"} else {set array "post"}
+ if {(!$warned) && ([regexp -- {^(-3|-2|-1)$} $mc_banm(pre:pun)])} {
+  switch -- $mc_banm(pre:pun) {
+   -3 { puthelp "NOTICE $nick :$reason"  ; set done "/notice" }
+   -2 { puthelp "PRIVMSG $nick :$reason" ; set done "/msg" }
+  }
+  if {[info exists done]} {
+   putlog "$mc_banm(script):  $nick ($uhost) \[$chan\] was warned via $done.  Match: [lindex $match 1]"
+  }
+  if {$mc_banm(warn:time)} {
+   utimer $mc_banm(warn:time) [list mc:banm:scan $nick $uhost $hand $chan 1]
+  }
  }
- if {(!$i) || (([matchattr $hand $mc_banm(ig:flag) $chan]) &&
-     ($mc_banm(ig:flag) != "-|-"))} {return 0}
- catch {unset mc_temp} ; set mc_temp(banmask) $nick![getchanhost $nick $chan]
- set maskban [mc:bm:inter:masktype $mc_temp(banmask) $mc_banm(banmask)]
- foreach ban $mc_banm(!banmask) {
-  if {![string match [string tolower *[join [join [split [lindex $ban 1] *]] *]*] [string tolower $mc_temp(banmask)]]} {continue}
-  if {!$warned} {
-   switch -- $mc_banm(pre:pun) {
-    -3 {
-     puthelp "NOTICE $nick :[mc:bm:inter:replace $mc_banm(warn:msg) "%banmask [lindex $ban 1] %chan $chan %uhost $mc_temp(banmask)"]"
-     putlog "$nick was warned for having [lindex $ban 1] in his mask:  $mc_temp(banmask)."
-     if {$mc_banm(warn:time)} {
-      timer $mc_banm(warn:time) "mc:bm:scan [split $nick] [split $uhost] [split $hand] [split $chan] 1"
-     }
-    }
-    -2 {
-     puthelp "PRIVMSG $nick :[mc:bm:inter:replace $mc_banm(warn:msg) "%banmask [lindex $ban 1] %chan $chan %uhost $mc_temp(banmask)"]"
-     putlog "$nick was warned for having [lindex $ban 1] in his mask:  $mc_temp(banmask)."
-     if {$mc_banm(warn:time)} {
-      timer $mc_banm(warn:time) "mc:bm:scan [split $nick] [split $uhost] [split $hand] [split $chan] 1"
-     }
-    }
-    -1 {
-     puthelp "KICK $chan $nick :[mc:bm:inter:replace [lrange $ban 2 e] "%banmask [lindex $ban 1] %chan $chan %uhost $mc_temp(banmask)"]"
-     putlog "$nick was kicked from $chan for having [lindex $ban 1] in his mask:  $mc_temp(banmask)."
-    }
-    default {
-     puthelp "MODE $chan +b $maskban"
-     puthelp "KICK $chan $nick :[mc:bm:inter:replace [lrange $ban 2 e] "%banmask [lindex $ban 1] %chan $chan %uhost $mc_temp(banmask)"]"
-     if {$mc_banm(pre:pun)} {
-      newchanban $chan $maskban banmask [mc:bm:inter:replace [lrange $ban 2 e] "%banmask [lindex $ban 1] %chan $chan %uhost $mc_temp(banmask)"] $mc_banm(pre:pun)
-      putlog "$nick was baned from $chan for $mc_banm(pre:pun) min's for having [lindex $ban 1] in his mask:  $mc_temp(banmask)."
-     } {putlog "$nick was baned from $chan for having [lindex $ban 1] in his mask:  $mc_temp(banmask)."}
-    }
-   }
-  } {
-   switch -- $mc_banm(post:pun) {
-    -1 {
-     puthelp "KICK $chan $nick :[mc:bm:inter:replace [lrange $ban 2 e] "%banmask [lindex $ban 1] %chan $chan %uhost $mc_temp(banmask)"]"
-     putlog "$nick was kicked from $chan for having [lindex $ban 1] in his mask:  $mc_temp(banmask)."
-    }
-    default {
-     puthelp "MODE $chan +b $maskban"
-     puthelp "KICK $chan $nick :[mc:bm:inter:replace [lrange $ban 2 e] "%banmask [lindex $ban 1] %chan $chan %uhost $mc_temp(banmask)"]"
-     if {$mc_banm(post:pun)} {
-      newchanban $chan $maskban banmask [mc:bm:inter:replace [lrange $ban 2 e] "%banmask [lindex $ban 1] %chan $chan %uhost $mc_temp(banmask)"] $mc_banm(post:pun)
-      putlog "$nick was baned from $chan for $mc_banm(post:pun) min's for having [lindex $ban 1] in his mask:  $mc_temp(banmask)."
-     } {putlog "$nick was baned from $chan for having [lindex $ban 1] in his mask:  $mc_temp(banmask)."}
-    }
-   }
-  } ; return
- }
+ if {$mc_banm(${array}:pun) >= "-1"} {
+  putserv "KICK $chan $nick :$reason"
+  set x "ed from $chan."
+  if {$mc_banm(${array}:pun) != "-1"} {
+   putserv "MODE $chan +b $banmask"
+   set x "/banned from $chan."
+  }
+  if {$mc_banm(${array}:pun) >= "1"} {
+   newchanban $chan $banmask ${botnet-nick} $reason $mc_banm(${array}:pun) none
+   set x "/banned from $chan. Ban duration: [duration [expr $mc_banm(${array}:pun)*60]]."
+  }; putlog "$mc_banm(script): $nick ($uhost) was kick$x  Match [lindex $match 1]"
+ }; return 1
 }
 
-bind dcc - banmask mc:bm:dcc:banmask
-proc mc:bm:dcc:banmask {hand idx args} {
- global mc_banm botnick ; set args [join $args]
- set chan [string tolower [lindex $args 0]]
- if {([lindex $args 1] == "") &&
-     (($chan == "") || ([string index $chan 0] == "#"))} {
-  if {$chan == ""} {
-   putdcc $idx "Current ban'd masks list:"
-   foreach ban $mc_banm(!banmask) {putdcc $idx " [join $ban]"} 
-  } {
-   putdcc $idx "Current ban'd masks list for $chan:"
-   foreach ban $mc_banm(!banmask) {
-    if {[lindex $ban 0] == $chan} {putdcc $idx " [join $ban]"}
-   }
-  }
- } {
-  if {[string index $chan 0] != "#"} {
-   if {![matchattr $hand m]} {
-    putdcc $idx "You must be a global master to preform a global mask ban."
-    return 0
-   }
-   set chan global
-   set ar [string tolower [lindex $args 0]]
-   set archan [string tolower [lindex $args 1]]
-   set reason [lrange $args 2 e]
-  } {
-   if {![matchattr $hand m|m $chan]} {
-    putdcc $idx "You must be a master to preform a mask ban on $chan."
-    return 0
-   }
-   set ar [string tolower [lindex $args 1]]
-   set archan [string tolower [lindex $args 2]]
-   set reason [lrange $args 3 e]
-  }
-  if {($chan != "global") && ![mc:bm:inter:chanflagison $chan mc.banmask]} {
-   putdcc $idx "$chan's banmask isn't turned on.  To turn it on type `.chanset $chan +mc.banmask'"
-   return 0
-  }
-  if {($ar != "add") && ($ar != "remove")} {
-   putdcc $idx "Invalid command $ar, valid options:  add, remove."
-   return 0
-  }
-  if {$ar == "add"} {
-   foreach ban $mc_banm(!banmask) {
-    if {$chan == "global"} {
-     if {([lindex $ban 0] == "global") && ([lindex $ban 1] == $archan)} {
-      putdcc $idx "$archan is already setup for a global ban."
-      return 0
-     }
-    } {
-     if {(([lindex $ban 0] == $chan) && ([lindex $ban 1] == $archan)) ||
-         (([lindex $ban 0] == "global") && ([lindex $ban 1] == $archan))} {
-      putdcc $idx "$archan is already setup for a ban."
-      return 0
-     }
-    }
-   }
-   set mc_banm(!banmask) "$mc_banm(!banmask) \{[split $chan] [split $archan] [split $reason]\}"
-   if {$chan == "global"} {
-    foreach xchan [string tolower [channels]] {
-     if {![mc:bm:inter:chanflagison $xchan mc.banmask]} {set mc_bm(:$chan:on:) 0;continue}
-     set mc_bm(:$chan:on:) 1
-     foreach xnick [chanlist $xchan] {
-      mc:bm:scan $xnick [getchanhost $xnick $xchan] [nick2hand $xnick $xchan] $xchan 0
-     }
-    }
-   } {
-    foreach xnick [chanlist $chan] {
-     mc:bm:scan $xnick [getchanhost $xnick $chan] [nick2hand $xnick $chan] $chan 0
-    };set mc_bm(:$chan:on:) 1
-   }
-  } {
-   set i 1 ; set list ""
-   foreach ban $mc_banm(!banmask) {
-    if {([lindex $ban 0] == $chan) && ([lindex $ban 1] == $archan)} {set i 0} {
-     set list "$list \{$ban\}" 
-    }
-   }
-   if {$i} {
-    putdcc $idx "$archan isn't a ban'd mask for $chan."
-    return 0
-   } {
-    set mc_banm(!banmask) [string trimleft $list " "]
-    putdcc $idx "Removed $archan from the ban list."
-   }
-  } ; mc:bm:save
- } ; return 1
-}
-
-proc mc:bm:save {} {
+proc mc:banm:hasaccess {hand {chan {}}} {
  global mc_banm
- set io [open $mc_banm(datafile) w]
- foreach ban $mc_banm(!banmask) {
-  set ban [split $ban]
-  puts $io "[lindex $ban 0] [lindex $ban 1] {[lrange $ban 2 e]}"
- } ; close $io ; putlog "Writing banmask file..."
+ if {[validchan $chan]} {
+  return [matchattr $hand $mc_banm(access) $chan]
+ } else {return [matchattr $hand $mc_banm(access)]}
 }
 
-proc mc:bm:inter:masktype {uhost type} {
- if {![string match "*!*@*.*" $uhost]} {
-  set nick [lindex [split $uhost "!"] 0]
-  if {$nick == ""} {
-   set uhost [string range $uhost [expr [string first ! $uhost]+1] e]
-   foreach chan [channels] {
-    set nick [lindex [findchanuser *$uhost* $chan] 0]
-    if {$nick != ""} {break}
-   }
-   if {$nick == ""} {set uhost $nick!} {set uhost "$nick![mc:bm:inter:gethost $nick]"}
-  }
-  if {$uhost == "$nick!" || $nothing} {set type "return_nothing"}
+# banmask [#channel]
+bind dcc - banmask mc:banm:dcc:banmask
+proc mc:banm:dcc:banmask {hand idx arg} {
+ global mc_banm
+ set chan [lindex $arg 0]
+ if {![mc:banm:hasaccess $hand $chan]} {
+  putcmdlog "#$hand# Denied (no access): banmask $chan"
+  putdcc $idx "$mc_banm(script):  Access denied:  '$mc_banm(access)' is required."
+  return 0
  }
- switch -exact $type {
-  0 {set ban "*[string range $uhost [string first ! $uhost] e]"}
-  1 {set ban "*!*[string trimleft [string range $uhost [expr [string first ! $uhost]+1] e] "~"]"}
-  2 {set ban "*!*[string range $uhost [string first @ $uhost] e]"}
-  3 {
-   set ident [string range $uhost [expr [string first ! $uhost]+1] [expr [string last @ $uhost]-1]]
-   set ban "*!*[string trimleft $ident "~"][string range [maskhost $uhost] [string first @ [maskhost $uhost]] e]"
-  }
-  4 {set ban "*!*[string range [maskhost $uhost] [string last "@" [maskhost $uhost]] e]"}
-  5 {set ban $uhost}
-  6 {
-   set nick [string range $uhost 0 [expr [string first "!" $uhost]-1]]
-   set ident [string range $uhost [expr [string first "!" $uhost]+1] [expr [string last "@" $uhost]-1]]
-   set ban "$nick!*[string trimleft $ident "~"][string range $uhost [string last "@" $uhost] e]"
-  }
-  7 {
-   set nick [string range $uhost 0 [expr [string first "!" $uhost]-1]]
-   set ban "$nick!*[string range $uhost [string last "@" $uhost] e]"
-  }
-  8 {
-   set nick [string range $uhost 0 [expr [string first "!" $uhost]-1]]
-   set ident [string range $uhost [expr [string first "!" $uhost]+1] [expr [string last "@" $uhost]-1]]
-   set ban "$nick!*[string trimleft $ident "~"][string range [maskhost $uhost] [string last "@" [maskhost $uhost]] e]"
-  }
-  9 {
-   set nick [string range $uhost 0 [expr [string first "!" $uhost]-1]]
-   set ban "$nick!*[string range [maskhost $uhost] [string last "@" [maskhost $uhost]] e]"
-  }
-  10 {
-   set host [string range $uhost [string last "@" $uhost] e]
-   if {[findip [string range $host 1 e]] == "0"} {
-    set host [replace $host "1 ? 2 ? 3 ? 4 ? 5 ? 6 ? 7 ? 8 ? 9 ? 0 ?"]
-    set ident [string range $uhost [expr [string first "!" $uhost]+1] [expr [string last "@" $uhost]-1]]
-    set ban "*!$ident$host"
-   } {set ban [masktype $uhost 0]}
-  }
-  11 {
-   set host [string range $uhost [string last "@" $uhost] e]
-   if {[findip [string range $host 1 e]] == "0"} {
-    set host [replace $host "1 ? 2 ? 3 ? 4 ? 5 ? 6 ? 7 ? 8 ? 9 ? 0 ?"]
-    set ident [string range $uhost [expr [string first "!" $uhost]+1] [expr [string last "@" $uhost]-1]]
-    set ban "*!*[string trimleft $ident "~"]$host"
-   } {set ban [masktype $uhost 1]}
-  }
-  12 {
-   set host [string range $uhost [string last "@" $uhost] e]
-   if {[findip [string range $host 1 e]] == "0"} {
-    set host [replace $host "1 ? 2 ? 3 ? 4 ? 5 ? 6 ? 7 ? 8 ? 9 ? 0 ?"]
-    set ban "*!*$host"
-   } {set ban [masktype $uhost 2]}
-  }
-  13 {
-   set host [string range $uhost [string last "@" $uhost] e]
-   if {[findip [string range $host 1 e]] == "0"} {set ban [masktype $uhost 11]} {set ban [masktype $uhost 3]}
-  }
-  14 {
-   set host [string range $uhost [string last "@" $uhost] e]
-   if {[findip [string range $host 1 e]] == "0"} {set ban [masktype $uhost 12]} {set ban [masktype $uhost 4]}
-  }
-  15 {
-   set host [string range $uhost [string last "@" $uhost] e]
-   if {[findip [string range $host 1 e]] == "0"} {
-    set host [replace $host "1 ? 2 ? 3 ? 4 ? 5 ? 6 ? 7 ? 8 ? 9 ? 0 ?"]
-    set rest [string range $uhost 0 [expr [string last "@" $uhost]-1]]
-    set ban $rest$host
-   } {set ban [masktype $uhost 5]}
-  }
-  16 {
-   set host [string range $uhost [string last "@" $uhost] e]
-   if {[findip [string range $host 1 e]] == "0"} {
-    set host [replace $host "1 ? 2 ? 3 ? 4 ? 5 ? 6 ? 7 ? 8 ? 9 ? 0 ?"]
-    set rest "[string range $uhost 0 [expr [string first "!" $uhost]-1]]!*[string trimleft [string range $uhost [expr [string first "!" $uhost]+1] [expr [string last "@" $uhost]-1]] "~"]"
-    set ban $rest$host
-   } {set ban [masktype $uhost 6]}
-  }
-  17 {
-   set host [string range $uhost [string last "@" $uhost] e]
-   if {[findip [string range $host 1 e]] == "0"} {
-    set host [replace $host "1 ? 2 ? 3 ? 4 ? 5 ? 6 ? 7 ? 8 ? 9 ? 0 ?"]
-    set rest "[string range $uhost 0 [expr [string first "!" $uhost]-1]]!*"
-    set ban $rest$host 
-   } {set ban [masktype $uhost 7]}
-  }
-  18 {
-   set host [string range $uhost [string last "@" $uhost] e]
-   if {[findip [string range $host 1 e]] == "0"} {set ban [masktype $uhost 16]} {set ban [masktype $uhost 8]}
-  }
-  19 {
-   set host [string range $uhost [string last "@" $uhost] e]
-   if {[findip [string range $host 1 e]] == "0"} {set ban [masktype $uhost 17]} {set ban [masktype $uhost 9]}
-  }
-  return_nothing {set ban ""}
-  default {set ban "*!*[string range $uhost [string first "@" $uhost] e]"}
+ if {(![validchan $chan]) && ($chan != "")} {
+  putcmdlog "#$hand# Denied (invalid channel): banmask $chan"
+  putdcc $idx "$mc_banm(script): Invalid channel: $chan"
+  return 0
  }
- set _nick [lindex [split $ban !] 0]
- set _ident [string range $ban [expr [string first ! $ban]+1] [expr [string last @ $ban]-1]]
- set _host [string range $ban [expr [string last @ $ban]+1] e]
- if {$_ident != [set temp [string range $_ident [expr [string length $_ident]-9] e]]} {
-  set _ident *[string trimleft $temp *]
+ if {($chan != "") && (![mc:banm:chanflag $chan mc.banmask])} {
+  putdcc $idx "$mc_banm(script) isn't enabled for $chan.  To enable type '.chanset $chan +mc.banmask'."
+  return 0
  }
- if {$_host != [set temp [string range $_host [expr [string length $_host]-63] e]]} {
-  set _host *[string trimleft $temp *]
- } ; return $_nick!$_ident@$_host
+ if {$chan == ""} {
+  putdcc $idx "Current ban'd masks list:"
+  foreach ban [mc:banm:list list all] {
+   putdcc $idx [format {  %-11s: %s} [lindex $ban 0] [lindex $ban 1]]
+   putdcc $idx [format {  %-11s  %s} "" [lindex $ban 2]]
+  }
+ } else {
+  putdcc $idx "Current ban'd masks list for $chan:"
+  foreach ban [mc:banm:list list $chan] {
+   putdcc $idx [format {  %-11s: %s} [lindex $ban 0] [lindex $ban 1]]
+   putdcc $idx [format {  %-11s  %s} "" [lindex $ban 2]]
+  }
+ }; return 1
 }
 
-proc mc:bm:inter:replace {string subs} {
- if {[llength $subs] == "1"} {set subs [lindex $subs 0]}
+# +banmask [#channel] <nick!ident@host or *word*> [reason]
+bind dcc - +banmask mc:banm:dcc:+banmask
+proc mc:banm:dcc:+banmask {hand idx arg} {
+ global mc_banm
+ if {[validchan [lindex $arg 0]]} {set i 0} else {set i -1}
+ set chan [lindex $arg $i]
+ set banmask [lindex $arg [expr $i+1]]
+ set reason [lrange $arg [expr $i+2] end]; unset i
+ if {![mc:banm:hasaccess $hand $chan]} {
+  putcmdlog "#$hand# Denied (no access): +banmask $arg"
+  putdcc $idx "$mc_banm(script):  Access denied:  '$mc_banm(access)' is required."
+  return 0
+ }
+ if {$banmask == ""} {
+  putdcc $idx "$mc_banm(script):  Syntax, +banmask \[#channel\] <nick!ident@host or *word*> \[reason\]"
+  return 0
+ }
+ if {($chan != "") && (![mc:banm:chanflag $chan mc.banmask])} {
+  putdcc $idx "$mc_banm(script) isn't enabled for $chan.  To enable type '.chanset $chan +mc.banmask'."
+  return 0
+ }
+ if {![mc:banm:list add $chan $banmask $reason]} {
+  putcmdlog "#$hand# Denied (already exists): +banmask $arg"
+  putdcc $idx "$mc_banm(script):  Access denied:  '$banmask' already exists."
+  return 0
+ }
+ putcmdlog "#$hand# +banmask $arg"
+ if {$chan == ""} {set x "the global"} else {set x "${chan}'s"}
+ putdcc $idx "$mc_banm(script):  Added '$banmask' to $x Ban Mask list."
+ return 0
+}
+
+# -banmask [#channel] <nick!ident@host or *word*>
+bind dcc - -banmask mc:banm:dcc:-banmask
+proc mc:banm:dcc:-banmask {hand idx arg} {
+ global mc_banm
+ if {[validchan [lindex $arg 0]]} {set i 0} else {set i -1}
+ set chan [lindex $arg $i]
+ set banmask [lindex $arg [expr $i+1]]; unset i
+ if {![mc:banm:hasaccess $hand $chan]} {
+  putcmdlog "#$hand# Denied (no access): -banmask $arg"
+  putdcc $idx "$mc_banm(script):  Access denied:  '$mc_banm(access)' is required."
+  return 0
+ }
+ if {$banmask == ""} {
+  putdcc $idx "$mc_banm(script):  Syntax, +banmask \[#channel\] <nick!ident@host or *word*>"
+  return 0
+ }
+ if {($chan != "") && (![mc:banm:chanflag $chan mc.banmask])} {
+  putdcc $idx "$mc_banm(script) isn't enabled for $chan.  To enable type '.chanset $chan +mc.banmask'."
+  return 0
+ }
+ if {![mc:banm:list remove $chan $banmask]} {
+  putcmdlog "#$hand# Denied (doesn't exists): +banmask $arg"
+  putdcc $idx "$mc_banm(script):  Access denied:  '$banmask' doesn't exists."
+  return 0
+ }
+ putcmdlog "#$hand# -banmask $arg"
+ if {$chan == ""} {set x "the global"} else {set x "${chan}'s"}
+ putdcc $idx "$mc_banm(script):  Removed '$banmask' from $x Ban Mask list."
+ return 0
+}
+
+proc mc:banm:list {command {chan {}} {nuhost {}} {reason {}}} {
+ global mc_banm {botnet-nick}  botnick
+ if {![file exists $mc_banm(datafile)]} {close [open $mc_banm(datafile) w]}
+ if {![info exists mc_banm(:list:)]} {set mc_banm(:list:) ""}
+ switch -- $command {
+  add {
+   if {[mc:banm:list exists $chan $nuhost]} {return 0}
+   lappend mc_banm(:list:) [list $chan $nuhost $reason]
+   mc:banm:list save -q
+   foreach channel [channels] {
+    mc:banm:join $botnick [getchanhost $botnick $chan] [nick2hand $botnick $chan] $chan
+   }; return 1
+  }
+  exists {
+   foreach line $mc_banm(:list:) {
+    if {([string tolower $chan] == [string tolower [lindex $line 0]]) &&
+        ([string tolower $nuhost] == [string tolower [lindex $line 1]])} {return 1}
+   }; return 0
+  }
+  list {
+   if {$chan == "all"} {return $mc_banm(:list:)}
+   set temp ""
+   foreach line $mc_banm(:list:) {
+    if {[string tolower $chan] == [lindex $line 0]} {lappend temp $line}
+   }; return $temp
+  }
+  load {
+   set io [open $mc_banm(datafile) r]; set mc_banm(:list:) ""
+   while {![eof $io]} {
+    gets $io line
+    if {([string index $line 0] == "#") || ([join $line] == "")} {continue}
+    lappend mc_banm(:list:) [lrange $line 1 end]
+   }; close $io
+  }
+  match {
+   foreach line "[mc:banm:list list] [mc:banm:list list $chan]" {
+    set st [lindex $line 1]
+    if {(($mc_banm(use:regexp)) && ([regexp -- [string tolower $st] [string tolower $nuhost]])) ||
+        ((!$mc_banm(use:regexp)) && ([string match [string tolower $st] [string tolower $nuhost]]))} {
+     return $line
+    }
+   }; return ""
+  }
+  remove {
+   set temp ""; set found 0
+   foreach line $mc_banm(:list:) {
+    if {(([string tolower $chan] == [string tolower [lindex $line 0]]) || ($chan == "")) &&
+        ([string tolower $nuhost] == [string tolower [lindex $line 1]])} {set found 1} \
+    else {lappend temp $line}
+   }; if {!$found} {return 0}
+   set mc_banm(:list:) $temp
+   mc:banm:list save -q
+   return 1
+  }
+  save {
+   if {$chan != "-q"} {putloglev o * "Writing banmask file ..."}
+   set io [open $mc_banm(datafile) w]
+   puts $io [list #v1 $mc_banm(version) ${botnet-nick} [clock seconds]]
+   foreach line [mc:banm:list list all] {puts $io "x $line"}; close $io
+  }
+ }
+}; mc:banm:list load
+
+bind evnt - save mc:banm:evnt ; proc mc:banm:evnt {type} {mc:banm:list save}
+
+proc mc:banm:masktype {hostmask type} {
+ set ident_max-length 9
+ set host_max-length 63
+ scan $hostmask {%[^!]!%[^@]@%s} nick ident host
+ set maskhost 1
+ if {[regexp -- {^1[0-9]$} $type]} {
+  if {!([regexp -- {^([0-9][0-9]?[0-9]?)\.([0-9][0-9]?[0-9]?)\.([0-9][0-9]?[0-9]?)\.([0-9][0-9]?[0-9]?)$} $host temp a b c d] && ($a > 0 && $a < 255 && $b < 255 && $c < 255 && $d < 255))} {
+   regsub -all {[0-9]} $host "?" host
+   set maskhost 0
+  };set type [string index $type 1]
+ }
+ if {[regexp -- {^[0-4]$} $type]} {set nick "*"}
+ if {[regexp -- {^[2479]$} $type]} {set ident "*"}
+ if {[regexp -- {^[1368]$} $type]} {set ident "*[string trimleft $ident ~]"}
+ if {[regexp -- {^[3489]$} $type]} {if {$maskhost} {scan [maskhost $host] {%[^@]@%s} temp host}}
+ if {[string length $ident] > ${ident_max-length}} {
+  set ident "*[string range $ident [expr [string length $ident]-${ident_max-length}] end]"
+ }
+ if {[string length $host] > ${host_max-length}} {
+  set host "*[string range $host [expr [string length $host]-${host_max-length}] end]"
+ }; return [format "%s!%s@%s" $nick $ident $host]
+}
+
+proc mc:banm:replace {text subs} {
+ if {![catch {string map -nocase $subs $text} output]} {return $output}
  for {set i 0} {[lindex $subs $i] != ""} {incr i 2} {
-  regsub -all -- [lindex $subs $i] $string [lindex $subs [expr $i+1]] string
- } ; return $string
+  regsub -all -- [lindex $subs $i] $text [lindex $subs [expr $i+1]] text
+ }; return $text
 }
 
-proc mc:bm:inter:gethost {args} {
- set nik [lindex [split $args] 0]
- foreach chan [channels] {
-  if {[onchan $nik $chan]} {
-   return [getchanhost $nik $chan]
-  }
- } ; return ""
+proc mc:banm:chanflag {channel flag} {
+ if {![validchan $channel]} {return -code error "no such channel record"}
+ set list [channel info $channel]
+ for {set i 0} {![regexp -- {^[0-9]*:[0-9]*$} [lindex $list $i]]} {incr i} {}
+ for {} {[regexp -- {^[0-9]*:[0-9]*$} [lindex $list $i]]} {incr i} {}
+ set list [lrange $list $i end]
+ foreach info [string tolower $list] {
+  if {[string range $info 1 end] != [string tolower $flag]} {continue}
+  if {[string index $info 0] == "-"} {
+   return 0
+  } elseif {[string index $info 0] == "+"} {return 1} else {return 2}
+ };return -1
 }
 
-proc mc:bm:inter:filt {data} {
- regsub -all -- \\\\ $data \\\\\\\\ data ; regsub -all -- \\\[ $data \\\\\[ data ; regsub -all -- \\\] $data \\\\\] data
- regsub -all -- \\\} $data \\\\\} data ; regsub -all -- \\\{ $data \\\\\{ data ; regsub -all -- \\\" $data \\\\\" data ; return $data
+## SVS v2.0
+if {(![info exists mc_banm(svs:enabled)]) ||
+    (![regexp -- {^(0|1)$} $mc_banm(svs:enabled)])} {set mc_banm(svs:enabled) 0}
+if {(![info exists mc_banm(svs:check)]) ||
+    ([regexp -- {[^0-9]} $mc_banm(svs:check)])} {set mc_banm(svs:check) 0}
+if {![info exists mc_banm(svs:notify)]} {set mc_banm(svs:notify) $owner}
+if {(![info exists mc_banm(svs:stableonly)]) ||
+    (![regexp -- {^(0|1)$} $mc_banm(svs:stableonly)])} {set mc_banm(svs:stableonly) 0}
+foreach bind [binds mc:banm:svs:time] {
+ unbind [lindex $bind 0] [lindex $bind 1] [lindex $bind 2] [lindex $bind 4]
 }
-
-set mc_banm(!banmask) ""
-if {![file exists $mc_banm(datafile)]} {
- set io [open $mc_banm(datafile) w] ; close $io
- set temp "\n ^\n `- Datafile not detected, remember to add ban'd masks.\n     `-Commands are explained in the script."
-} {
- set io [open $mc_banm(datafile) r]
- while {![eof $io]} {
-  set string [gets $io]
-  if {[join $string] == ""} {continue}
-  set mc_banm(!banmask) "$mc_banm(!banmask) \{[split [lindex $string 0]] [split [lindex $string 1]] [split [lindex $string 2]]\}"
- } ; close $io
- set mc_banm(!banmask) [string trimleft $mc_banm(!banmask) " "]
- set mc_banm(!banmask) [string trimright $mc_banm(!banmask) " "]
- set temp ""
-}
-
-proc mc:bm:inter:chanflagison {chan flag} {
- set chan [string tolower $chan]
- foreach info [channel info $chan] {
-  if {[string range $info 1 e] == $flag} {
-   if {[string index $info 0] == "-"} {return 0} {return 1}
-  }
- };return 0
-}
-
+foreach command [info commands mc:banm:svs:time] {rename $command ""}
 if {$mc_banm(svs:enabled)} {
  if {($mc_banm(svs:check) > "23") || ($mc_banm(svs:check) < "0")} {set mc_banm(svs:check) 00}
  if {[string length $mc_banm(svs:check)] == "1"} {set mc_banm(svs:check) 0$mc_banm(svs:check)}
- if {$mc_banm(svs:stableonly)} {
-  set mc_banm(svs:script) [string range $mc_banm(svs:script) 0 [expr [string length $mc_banm(svs:script)]-4]]999
- }
- catch {unbind time - "00 $mc_banm(svs:oldcheck) * * *" mc:banm:svs:time}
- set mc_banm(svs:oldcheck) $mc_banm(svs:check)
- bind time - "00 $mc_banm(svs:check) * * *" mc:banm:svs:time
- proc mc:banm:svs:time {min hour day month year} {
+ bind time - "00 $mc_banm(svs:check) *" mc:banm:svs:time
+ proc mc:banm:svs:time {{args ""}} {
   global mc_banm
-  catch {control [connect [lindex $mc_banm(svs:server) 0] [lindex $mc_banm(svs:server) 1]] mc:banm:svs:interface}
+  if {[catch {socket -async $mc_banm(svs:server) $mc_banm(svs:port)} sid]} {;\
+   putlog "SVS Error\[$mc_banm(svs:script)/$mc_banm(svs:version)\]:  $sid"
+   return 1
+  }
+  fconfigure $sid -blocking 0 -buffering line
+  set tout [after 60000 "mc:banm:svs:interface $sid timeout"]
+  fileevent $sid readable "mc:banm:svs:interface $sid $tout"
+  puts $sid "GET $mc_banm(svs:get)?$mc_banm(svs:query) HTTP/1.0\
+           \nHost: $mc_banm(svs:server)\n"
+  flush $sid
  }
 }
-proc mc:banm:svs:interface {idx args} {
- global mc_banm;set args [join $args]
- switch -- [lindex $args 0] {
-  "" {return 1}
-  000 {putdcc $idx q}
-  002 {putdcc $idx [lindex $mc_banm(svs:script) 0]}
-  003 {
-   set args [lrange $args 1 e]
-   if {[lindex $args 0] != [lindex $mc_banm(svs:script) 0]} {return 0}
-   putdcc $idx q
-   if {[lindex $args 1] > [lindex $mc_banm(svs:script) 1]} {
-    set note [mc:banm:svs:replace [lindex $args 7] "%0 {[lindex $args 0]} %1 {[lindex $args 1]} %2 {[lindex $args 2]}"]
-    set note [mc:banm:svs:replace $note "%3 {[lindex $args 3]} %4 {[lindex $args 4]} %5 {[lindex $args 5]}"]
-    set note [mc:banm:svs:replace $note "%6 {[lindex $args 6]} %8 {[lindex $args 8]} %version {$mc_banm(version)}"]
-    set note [mc:banm:svs:replace $note "%9 {[lindex $args 9]} %10 {[lindex $args 10]} %11 {[lindex $args 11]}"]
-    set note [mc:banm:svs:replace $note "%12 {[lindex $args 12]} %13 {[lindex $args 13]} %14 {[lindex $args 14]}"]
-    set note [mc:banm:svs:replace $note "%15 {[lindex $args 15]} %16 {[lindex $args 16]} %17 {[lindex $args 17]}"]
-    set note [mc:banm:svs:replace $note "%18 {[lindex $args 18]} %19 {[lindex $args 19]} %20 {[lindex $args 20]}"]
-    foreach notify [join [split $mc_banm(svs:notify) ",;"]] {
-     set outnote [mc:banm:svs:replace $note "%nick {$notify}"]
-     if {[string match "*$outnote*" "[notes $notify -[notes $notify]]"]} {
-      set cont 0
-      foreach unote [notes $notify -[notes $notify]] {
-       if {$outnote == [lindex $unote 2]} {set cont 1;break}
-      };if {$cont} {continue}
-     }
-     switch -- [sendnote SVS $notify $outnote] {
-      0 {putlog "MC SVS for [lindex $mc_banm(svs:script) 0] had some errors updating $notify on current version of script; unknown reason!"}
-      3 {putlog "MC SVS for [lindex $mc_banm(svs:script) 0] had some errors updating $notify on current version of script; notebox too full!"}
+proc mc:banm:svs:interface {sid tout} {
+ global mc_banm
+ if {$tout == "timeout"} {
+  putlog "SVS Warning\[$mc_banm(svs:script)/$mc_banm(svs:version)\]:  SVS Server timed out."
+  close $sid
+  return 0
+ }; after cancel $tout
+ set temp 0
+ while {![eof $sid]} {
+  gets $sid get
+  if {$temp < "2"} {
+   if {$get == ""} {incr temp; if {$temp == "1"} {set temp 2}}
+   continue
+  }; if {$get == ""} {continue}
+  switch -- [lindex $get 0] {
+   003 {
+    set reply [lrange $get 1 end]
+    if {[lindex $reply 0] != $mc_banm(svs:script)} {
+     putlog "SVS Error\[$mc_banm(svs:script)/$mc_banm(svs:version)\]:  SVS Server sent wrong info, got [lindex $reply 0]"
+     break   
+    }
+    if {$mc_banm(svs:stableonly)} {
+     set temp [string range $mc_banm(svs:version) 0 8]999
+    } else {set temp [string range $mc_banm(svs:version) 0 11]}
+    if {[lindex $reply 1] > $temp} {
+     set note [lindex $reply 5]
+     regsub -- %0 $note [lindex $reply 0] note
+     regsub -- %1 $note [lindex $reply 1] note
+     regsub -- %2 $note [lindex $reply 2] note
+     regsub -- %3 $note [lindex $reply 3] note
+     regsub -- %4 $note [lindex $reply 4] note
+     regsub -- %version $note $mc_banm(version) note
+     foreach to [split $mc_banm(svs:notify) ",; "] {
+      if {$to == ""} {continue}
+      regsub -- %nick $note $to outnote
+      if {[string match *$outnote* [set unotes [notes $to -[notes $to]]]]} {
+       set temp 0
+       foreach unote $unotes {
+        if {$outnote == [lindex $unote 2]} {set temp 1; break}
+       }; if {$temp} {continue}
+      }
+      switch -- [sendnote SVS $to $outnote] {
+       0 {
+        if {![validuser $notify]} {set x "invalid user"} else {set x "unknown error"}
+        putlog "SVS Error\[$mc_banm(svs:script)/$mc_banm(svs:version)\]:  Trying to send note to $to, $x."
+       }
+       3 {putlog "SVS Error\[$mc_banm(svs:script)/$mc_banm(svs:version)\]:  Trying to send note to $to, notebox too full!"}
+      }
      }
     }
    }
   }
- };return 0
+ }; close $sid
 }
-proc mc:banm:svs:replace {string subs} {
- if {[llength $subs] == "1"} {set subs [lindex $subs 0]}
- for {set i 0} {[lindex $subs $i] != ""} {incr i 2} {
-  regsub -all -- [lindex $subs $i] $string [lindex $subs [expr $i+1]] string
- } ; return $string
-}
+## ^
 
-if {[info exists mc_banm()]} {
- putlog " ,- mc_banm() detected -- you cannot change the words in the ()'s!"
- putlog " |- This script may not function correctly..."
- putlog " V"
-}
-putlog "Ban Mask $mc_banm(version) by MC_8 loaded. $temp"
+putlog "$mc_banm(script) $mc_banm(version) by MC_8 loaded."
